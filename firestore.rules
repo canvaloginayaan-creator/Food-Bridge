@@ -1,0 +1,263 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function owner(uid) { return signedIn() && request.auth.uid == uid; }
+    function adminPath() { return /databases/$(database)/documents/admins/$(request.auth.uid); }
+    // Admin access comes only from a trusted console/Admin SDK write to the
+    // authenticated user's own admins document. Client writes are never allowed.
+    function admin() {
+      return signedIn() && ('email' in request.auth.token) && request.auth.token.email is string
+        && exists(adminPath()) && get(adminPath()).data.keys().hasAll(['active','email'])
+        && get(adminPath()).data.active == true && get(adminPath()).data.email == request.auth.token.email;
+    }
+    match /admins/{uid} {
+      // Users may check their own access, including an absent or inactive record.
+      allow get: if owner(uid);
+      allow list, create, update, delete: if false;
+    }
+    function profilePath() { return /databases/$(database)/documents/profiles/$(request.auth.uid); }
+    function hasProfile() { return signedIn() && exists(profilePath()); }
+    function profile() { return get(profilePath()).data; }
+    function approved(role) { return hasProfile() && profile().role == role && profile().status == 'approved'; }
+    function individual() { return hasProfile() && profile().role == 'individual'; }
+    function bounded(value, min, max) { return value is string && value.size() >= min && value.size() <= max; }
+    function optionalUrl(value) { return bounded(value, 0, 500) && (value == '' || value.matches('^https?://.+')); }
+    function evidenceUrl(value) { return bounded(value, 1, 500) && value.matches('^https?://.+'); }
+    function validEvidenceUrls(urls) {
+      return urls is list && urls.size() <= 5
+        && (urls.size() < 1 || evidenceUrl(urls[0]))
+        && (urls.size() < 2 || evidenceUrl(urls[1]))
+        && (urls.size() < 3 || evidenceUrl(urls[2]))
+        && (urls.size() < 4 || evidenceUrl(urls[3]))
+        && (urls.size() < 5 || evidenceUrl(urls[4]));
+    }
+    function validProfile(d, uid) {
+      return d.keys().hasAll(['uid','role','status','name','contactName','email','phone','city','address','website','description','evidenceUrls','createdAt','consentAt','updatedAt','reviewedAt','reviewedBy','reviewNote'])
+        && d.keys().hasOnly(['uid','role','status','name','contactName','email','phone','city','address','website','description','evidenceUrls','createdAt','consentAt','updatedAt','reviewedAt','reviewedBy','reviewNote'])
+        && d.uid == uid && d.role in ['restaurant','organization','individual']
+        && d.status in ['pending','approved','rejected']
+        && bounded(d.name, 1, 120) && bounded(d.contactName, 1, 120)
+        && bounded(d.email, 3, 320) && bounded(d.phone, 7, 30) && bounded(d.city, 1, 100)
+        && bounded(d.address, 0, 240) && optionalUrl(d.website) && bounded(d.description, 0, 1000)
+        && validEvidenceUrls(d.evidenceUrls)
+        && d.createdAt is timestamp && d.consentAt is timestamp && d.updatedAt is timestamp
+        && (d.reviewedAt == null || d.reviewedAt is timestamp)
+        && bounded(d.reviewedBy, 0, 128) && bounded(d.reviewNote, 0, 500)
+        && ((d.role == 'individual' && d.address == '' && d.website == '' && d.description == '' && d.evidenceUrls.size() == 0)
+          || (d.role in ['restaurant','organization'] && d.address.size() > 0 && d.description.size() > 0 && (d.website.size() > 0 || d.evidenceUrls.size() > 0)));
+    }
+
+    match /profiles/{uid} {
+      allow get: if owner(uid) || admin();
+      allow list: if admin();
+      allow create: if owner(uid) && validProfile(request.resource.data, uid)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == 'pending'
+        && request.resource.data.reviewedAt == null && request.resource.data.reviewedBy == '' && request.resource.data.reviewNote == ''
+        && request.resource.data.createdAt == request.time && request.resource.data.consentAt == request.time && request.resource.data.updatedAt == request.time;
+      // Applicants can only edit and resubmit a rejected application. Role,
+      // identity and original submission time cannot be changed by the user.
+      allow update: if owner(uid) && resource.data.status == 'rejected'
+        && validProfile(request.resource.data, uid)
+        && request.resource.data.uid == resource.data.uid && request.resource.data.role == resource.data.role
+        && request.resource.data.email == resource.data.email && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.status == 'pending' && request.resource.data.reviewedAt == null
+        && request.resource.data.reviewedBy == '' && request.resource.data.reviewNote == ''
+        && request.resource.data.consentAt == request.time && request.resource.data.updatedAt == request.time;
+      allow update: if admin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','reviewNote','reviewedBy','reviewedAt','updatedAt'])
+        && request.resource.data.status in ['approved','rejected']
+        && bounded(request.resource.data.reviewNote, 0, 500)
+        && (request.resource.data.status != 'rejected' || request.resource.data.reviewNote.size() > 0)
+        && request.resource.data.reviewedBy == request.auth.uid
+        && request.resource.data.reviewedAt == request.time && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    function validCenter(d) {
+      return d.keys().hasAll(['name','type','city','address','hours','phone','mapUrl','active','createdAt','updatedAt'])
+        && d.keys().hasOnly(['name','type','city','address','hours','phone','mapUrl','active','createdAt','updatedAt'])
+        && bounded(d.name, 1, 120) && d.type in ['foodbridge','partner'] && bounded(d.city, 1, 100)
+        && bounded(d.address, 1, 240) && bounded(d.hours, 0, 200) && bounded(d.phone, 0, 30)
+        && optionalUrl(d.mapUrl) && d.active is bool && d.createdAt is timestamp && d.updatedAt is timestamp;
+    }
+    match /centers/{centerId} {
+      allow read: if admin() || (resource.data.active == true && (individual() || approved('restaurant') || approved('organization')));
+      allow create: if admin() && validCenter(request.resource.data)
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
+      allow update: if admin() && validCenter(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    function centerMatches(d) {
+      let path = /databases/$(database)/documents/centers/$(d.centerId);
+      return exists(path) && get(path).data.active == true && get(path).data.type == 'foodbridge'
+        && get(path).data.name == d.centerName && get(path).data.address == d.centerAddress && get(path).data.city == d.centerCity;
+    }
+    function restaurantStillApproved(d) {
+      let path = /databases/$(database)/documents/profiles/$(d.restaurantId);
+      return exists(path) && get(path).data.role == 'restaurant' && get(path).data.status == 'approved';
+    }
+    function validListing(d) {
+  return d.keys().hasAll([
+    'restaurantId','restaurantName','restaurantPhone','title','category',
+    'quantity','unit','description','allergens','storageInstructions',
+    'preparedAt','availableFrom','pickupBy','centerId','centerName',
+    'centerAddress','centerCity','status','bookedBy','bookingId',
+    'createdAt','updatedAt'
+  ])
+    && d.keys().hasOnly([
+      'restaurantId','restaurantName','restaurantPhone','title','category',
+      'quantity','unit','description','allergens','storageInstructions',
+      'imageUrl','preparedAt','availableFrom','pickupBy','centerId',
+      'centerName','centerAddress','centerCity','status','bookedBy',
+      'bookingId','createdAt','updatedAt'
+    ])
+    && (!('imageUrl' in d) || optionalUrl(d.imageUrl))
+    && bounded(d.restaurantId, 1, 128)
+    && bounded(d.restaurantName, 1, 120)
+    && bounded(d.restaurantPhone, 7, 30)
+    && bounded(d.title, 1, 120)
+    && d.category in ['Prepared meal','Fresh produce','Bakery','Packaged food','Other']
+    && d.quantity is int && d.quantity > 0 && d.quantity <= 100000
+    && d.unit in ['meals','boxes','packets','portions','kg','baskets','other']
+    && bounded(d.description, 1, 1000)
+    && bounded(d.allergens, 1, 500)
+    && bounded(d.storageInstructions, 1, 500)
+    && d.preparedAt is timestamp
+    && d.availableFrom is timestamp
+    && d.pickupBy is timestamp
+    && bounded(d.centerId, 1, 128)
+    && bounded(d.centerName, 1, 120)
+    && bounded(d.centerAddress, 1, 240)
+    && bounded(d.centerCity, 1, 100)
+    && d.status in ['available','booked','collected','cancelled']
+    && bounded(d.bookedBy, 0, 128)
+    && bounded(d.bookingId, 0, 128)
+    && d.createdAt is timestamp
+    && d.updatedAt is timestamp;
+}
+    match /listings/{listingId} {
+      allow read: if admin()
+        || (approved('restaurant') && resource.data.restaurantId == request.auth.uid)
+        || (approved('organization') && (resource.data.status == 'available' || resource.data.bookedBy == request.auth.uid));
+      allow create: if approved('restaurant') && validListing(request.resource.data)
+        && request.resource.data.restaurantId == request.auth.uid
+        && request.resource.data.restaurantName == profile().name && request.resource.data.restaurantPhone == profile().phone
+        && request.resource.data.status == 'available' && request.resource.data.bookedBy == '' && request.resource.data.bookingId == ''
+        && request.resource.data.preparedAt <= request.time && request.resource.data.availableFrom >= request.resource.data.preparedAt
+        && request.resource.data.pickupBy > request.resource.data.availableFrom && request.resource.data.pickupBy > request.time
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
+        && centerMatches(request.resource.data);
+      // A restaurant may withdraw an unbooked listing.
+      allow update: if approved('restaurant') && resource.data.restaurantId == request.auth.uid
+        && resource.data.status == 'available' && request.resource.data.status == 'cancelled'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && request.resource.data.updatedAt == request.time;
+      // Administrators can withdraw an unbooked listing during moderation.
+      allow update: if admin() && resource.data.status == 'available' && request.resource.data.status == 'cancelled'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && request.resource.data.updatedAt == request.time;
+      // Reserving the listing and creating its booking must happen in one atomic transaction.
+      allow update: if approved('organization') && resource.data.status == 'available'
+        && request.resource.data.status == 'booked' && request.resource.data.bookedBy == request.auth.uid
+        && bounded(request.resource.data.bookingId, 1, 128)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','bookedBy','bookingId','updatedAt'])
+        && request.resource.data.updatedAt == request.time && resource.data.pickupBy > request.time && centerMatches(resource.data) && restaurantStillApproved(resource.data)
+        && !exists(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.listingId == listingId
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.organizationId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.status == 'booked';
+      // The organization may release its booking; both records change together.
+      allow update: if approved('organization') && resource.data.status == 'booked' && resource.data.bookedBy == request.auth.uid
+        && request.resource.data.status == 'available' && request.resource.data.bookedBy == '' && request.resource.data.bookingId == ''
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','bookedBy','bookingId','updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.organizationId == request.auth.uid
+        && get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.status == 'booked'
+        && getAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.status == 'cancelled';
+      // Only the owning restaurant can confirm collection, atomically with the booking.
+      allow update: if approved('restaurant') && resource.data.restaurantId == request.auth.uid && resource.data.status == 'booked'
+        && request.resource.data.status == 'collected'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && getAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.status == 'collected';
+      // Admin may confirm organization collection, atomically with the booking.
+      allow update: if admin() && resource.data.status == 'booked'
+        && request.resource.data.status == 'collected'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.listingId == listingId
+        && getAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.status == 'collected';
+      // Admin may cancel the booking and withdraw the listing in one transaction.
+      allow update: if admin() && resource.data.status == 'booked'
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.bookedBy == '' && request.resource.data.bookingId == ''
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','bookedBy','bookingId','updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.listingId == listingId
+        && get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.organizationId == resource.data.bookedBy
+        && get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.status == 'booked'
+        && getAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.status == 'cancelled';
+      allow delete: if false;
+    }
+
+    function validBooking(d) {
+      return d.keys().hasAll(['listingId','listingTitle','restaurantId','restaurantName','restaurantPhone','quantity','unit','organizationId','organizationName','centerId','centerName','centerAddress','centerCity','contactName','contactPhone','transport','notes','pickupAt','selfPickup','status','createdAt','updatedAt'])
+        && d.keys().hasOnly(['listingId','listingTitle','imageUrl','restaurantId','restaurantName','restaurantPhone','quantity','unit','organizationId','organizationName','centerId','centerName','centerAddress','centerCity','contactName','contactPhone','transport','notes','pickupAt','selfPickup','status','createdAt','updatedAt'])
+        && (!('imageUrl' in d) || optionalUrl(d.imageUrl))
+        && bounded(d.listingId, 1, 128) && bounded(d.listingTitle, 1, 120)
+        && bounded(d.restaurantId, 1, 128) && bounded(d.restaurantName, 1, 120) && bounded(d.restaurantPhone, 7, 30)
+        && d.quantity is int && d.quantity > 0 && d.quantity <= 100000 && d.unit in ['meals','boxes','packets','portions','kg','baskets','other']
+        && bounded(d.organizationId, 1, 128) && bounded(d.organizationName, 1, 120)
+        && bounded(d.centerId, 1, 128) && bounded(d.centerName, 1, 120) && bounded(d.centerAddress, 1, 240) && bounded(d.centerCity, 1, 100)
+        && bounded(d.contactName, 1, 120) && bounded(d.contactPhone, 7, 30) && bounded(d.transport, 1, 120) && bounded(d.notes, 0, 500)
+        && d.pickupAt is timestamp && d.selfPickup == true && d.status in ['booked','cancelled','collected']
+        && d.createdAt is timestamp && d.updatedAt is timestamp;
+    }
+    function bookingMatchesListing(d, bookingId) {
+      let path = /databases/$(database)/documents/listings/$(d.listingId);
+      let listing = get(path).data;
+      let after = getAfter(path).data;
+      return exists(path) && listing.status == 'available' && listing.pickupBy > request.time && centerMatches(listing) && restaurantStillApproved(listing)
+        && d.listingTitle == listing.title && d.restaurantId == listing.restaurantId && d.restaurantName == listing.restaurantName && d.restaurantPhone == listing.restaurantPhone
+        && (!('imageUrl' in d) || d.imageUrl == '' || (('imageUrl' in listing) && d.imageUrl == listing.imageUrl))
+        && d.quantity == listing.quantity && d.unit == listing.unit
+        && d.centerId == listing.centerId && d.centerName == listing.centerName && d.centerAddress == listing.centerAddress && d.centerCity == listing.centerCity
+        && d.pickupAt >= listing.availableFrom && d.pickupAt <= listing.pickupBy && d.pickupAt > request.time
+        && after.status == 'booked' && after.bookedBy == request.auth.uid && after.bookingId == bookingId;
+    }
+    match /bookings/{bookingId} {
+      allow read: if admin()
+        || (approved('restaurant') && resource.data.restaurantId == request.auth.uid)
+        || (approved('organization') && resource.data.organizationId == request.auth.uid);
+      allow create: if approved('organization') && validBooking(request.resource.data)
+        && request.resource.data.organizationId == request.auth.uid && request.resource.data.organizationName == profile().name
+        && request.resource.data.status == 'booked' && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
+        && bookingMatchesListing(request.resource.data, bookingId);
+      allow update: if resource.data.status == 'booked'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && ((approved('organization') && resource.data.organizationId == request.auth.uid && request.resource.data.status == 'cancelled'
+          && get(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.bookingId == bookingId
+          && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.status == 'available'
+          && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.bookedBy == ''
+          && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.bookingId == '')
+        || (approved('restaurant') && resource.data.restaurantId == request.auth.uid && request.resource.data.status == 'collected'
+          && get(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.bookingId == bookingId
+          && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.status == 'collected')
+        || (admin() && request.resource.data.status == 'collected'
+          && get(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.bookingId == bookingId
+          && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.status == 'collected')
+        || (admin() && request.resource.data.status == 'cancelled'
+          && get(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.bookingId == bookingId
+          && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.status == 'cancelled'
+          && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.bookedBy == ''
+          && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.bookingId == ''));
+      allow delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

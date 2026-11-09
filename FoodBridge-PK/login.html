@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Sign In & Login | FoodBridge PK">
+  <title>Sign In / Login | FoodBridge PK</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/css/style.css" rel="stylesheet">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <nav class="navbar navbar-expand-lg">
+      <div class="container">
+        <a class="brand-lockup" href="index.html">
+          <img src="assets/images/foodbridge-logo.png" alt="FoodBridge Logo" height="42" style="border-radius:10px; border: 1px solid var(--green); background: #fff9ef; padding: 2px;">
+          <span>FoodBridge <span style="color:var(--green);font-weight:700">PK</span></span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="mainNav">
+          <div class="navbar-nav ms-auto align-items-lg-center">
+            <a class="nav-link" href="index.html">Home</a>
+            <a class="nav-link" href="explore.html">Explore Food</a>
+            <a class="nav-link" href="add-food.html">Add Food</a>
+            <a class="nav-link" href="about.html">About Us</a>
+            <a class="nav-link" href="donor-dashboard.html">Donor Dashboard</a>
+            <a class="nav-link" href="receiver-dashboard.html">Receiver Dashboard</a>
+            <a class="nav-link active fw-bold text-success" href="login.html">Login / Sign In</a>
+            <a class="nav-link nav-cta ms-lg-2" href="add-food.html">Share Food +</a>
+          </div>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <section class="page-hero">
+      <div class="container text-center">
+        <span class="eyebrow">Welcome Back</span>
+        <h1 class="page-title">Sign In to FoodBridge PK</h1>
+        <p class="lead-copy mx-auto">Access your account to share extra food or arrange community meal pickups.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="row justify-content-center">
+          <div class="col-md-6 col-lg-5">
+            <div class="form-panel p-4 shadow-sm">
+              <h2 class="h4 fw-bold text-success mb-3 text-center">Account Login</h2>
+              
+              <!-- Continue with Google Button -->
+              <div class="d-grid gap-2 mb-4">
+                <button type="button" class="btn btn-outline-dark d-flex align-items-center justify-content-center gap-2 py-2" style="border-radius: 12px; font-weight: 700;" onclick="alert('Demo: Continue with Google clicked!')">
+                  <svg width="20" height="20" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.95H1.2v3.15C3.16 21.32 7.23 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.25c-.25-.72-.38-1.49-.38-2.25s.13-1.53.38-2.25V6.6H1.2C.44 8.14 0 9.87 0 12s.44 3.86 1.2 5.4l4.08-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.23 0 3.16 2.68 1.2 6.6l4.08 3.15c.95-2.84 3.6-4.95 6.72-4.95z"/>
+                  </svg>
+                  <span>Continue with Google</span>
+                </button>
+              </div>
+
+              <div class="d-flex align-items-center mb-4">
+                <hr class="flex-grow-1">
+                <span class="px-3 text-muted small fw-bold">OR</span>
+                <hr class="flex-grow-1">
+              </div>
+
+              <!-- Standard Form -->
+              <form id="login-form" onsubmit="event.preventDefault(); alert('Demo: Login successful!');">
+                <div class="mb-3">
+                  <label for="email" class="form-label">Email Address</label>
+                  <input type="email" class="form-control" id="email" placeholder="name@example.com" required>
+                </div>
+                <div class="mb-3">
+                  <label for="password" class="form-label">Password</label>
+                  <input type="password" class="form-control" id="password" placeholder="Enter password" required>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="rememberMe">
+                    <label class="form-check-label small" for="rememberMe">Remember me</label>
+                  </div>
+                  <a href="#" class="small text-success text-decoration-none" onclick="alert('Demo: Password reset link sent.')">Forgot password?</a>
+                </div>
+                <button type="submit" class="btn-brand w-100 py-2">Sign In</button>
+              </form>
+
+              <div class="text-center mt-4">
+                <p class="small text-muted mb-0">Don't have an account? <a href="#" class="text-success fw-bold" onclick="alert('Demo: Sign Up form coming soon!')">Create one now</a></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-lg-5">
+          <a class="brand-lockup mb-3" href="index.html" style="color:#fff">
+            <img src="assets/images/foodbridge-logo.png" alt="FoodBridge Logo" height="40" style="border-radius:10px; border: 1px solid var(--green); background: #fff; padding: 2px;">
+            FoodBridge PK
+          </a>
+          <p class="mb-2">Sharing extra food, spreading kindness and building a caring community.</p>
+          <span class="student-note" style="color:#c4d5ca">A student frontend project · Green Student Edition</span>
+        </div>
+        <div class="col-6 col-lg-3">
+          <h2 class="footer-title">Explore</h2>
+          <ul class="footer-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="explore.html">Food Listings</a></li>
+            <li><a href="add-food.html">Add Food</a></li>
+            <li><a href="about.html">About Us</a></li>
+          </ul>
+        </div>
+        <div class="col-6 col-lg-4">
+          <h2 class="footer-title">Project Pages</h2>
+          <ul class="footer-links">
+            <li><a href="login.html">Login / Sign In</a></li>
+            <li><a href="donor-dashboard.html">Donor Dashboard</a></li>
+            <li><a href="receiver-dashboard.html">Receiver Dashboard</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">© <span id="current-year"></span> FoodBridge PK · Classroom demonstration only. No real data is saved.</div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

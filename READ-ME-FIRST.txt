@@ -1,0 +1,22 @@
+FoodBridge PK - complete source project
+
+This archive contains the complete project source, including the original website
+CSS (assets/css/style.css), food photo CSS, images, HTML, JavaScript, Firebase
+configuration and Firestore rules, plus the revised administration files.
+
+Use the files directly in this folder as the current project. The nested
+FoodBridge-PK/ folder and FoodBridge-PK.zip are older legacy copies that were
+already in the original repository; do not use those as the current website.
+
+Node.js 22.13 or later is required. To run the site locally from this folder:
+  npm install
+  npm run dev
+
+To build the public website: npm run build
+To build the separate administrator website: npm run build:admin
+Each build writes to dist; save the public build before building the admin.
+Dependencies (node_modules) and temporary build output are not included.
+
+The code does not change your live site or Firebase rules by itself. Review the
+README and Firestore rules before publishing them. No automatic dispatch,
+delivery verification or notification is included.
